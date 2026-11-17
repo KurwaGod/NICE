@@ -1,99 +1,144 @@
-Disguising a Dastardly Deed with Disappeared Data
-
-PART I:
-
-I am tasked with decrypting and unzipping the contents in the "exfiltratroll.zip" archive. 
-
-I first booted up the Workstation-Desk and opened File Explorer. I navigated to the "E:\Ione" and saw encrypted archive "exfiltratroll.zip". The zip archive was locked with a password. I wanted to use decryption tools to assist in opening this archive.
-
-In order to open the zip archive, I will need to crack the encryption. To do so I will use "pkcrack". I booted up the Security-Desk VM and logged in.
-
-Next, on the Workstation-Desk I opened firefox and downloaded FileZilla from "https://filezilla-project.org". After installing FileZilla, I opened the program. To transfer files from Windows to Kali, I gave input on the Host, Username, and Password fields then hit "Quickconnect".
-
-Host: sftp://playerone@172.16.30.6
-Username: playerone
-Password: password123
-
-After connecting to Kali through FileZilla, I then expanded E:\Ione and dragged the "exfiltratroll.zip" archive over to Kali and placed it on the "Desktop" directory.
-__________________________________
-PART II:
-Updating Kali and Downloading/Installing CMAKE and PKCRACK
-
-Next on the Kali VM, I ran the command:
->sudo apt-get update
-
-Then I downloaded and installed CMAKE 
->sudo apt show cmake
->sudo apt install cmake g++ make 
-
-Then I installed pkcrack
->git clone https://github.com/keyunluo/pkcrack
->mkdir pkcrack/build
->cd pkcrack/build
->cmake ..
->make
-_______________________________________________
-PART III:
-Understanding PKCRACK
-
-First, knowing how PKCRACK works is important. PKCRACK is a Known-Plaintext Attack (KPA). You must know the contents of one the files that is in the compressed, encrypted archive. When observing the contents of the "exfiltratroll.zip" archive on E:\Ione, I noticed there was a file called "astral.jpg". Inside of the folder "Ione" there is a file also called "astral.jpg" that is unencrypted. This is the key to solving this challenge. We have our known-plaintext file that we need. 
-In order to condense this information down, PKCRACK relies on 4 inputs: the encrypted archive (exfiltratroll.zip), the known-plaintext file inside of the encrypted archive (astral.jpg), an unencrypted archive (KnowFile.zip), and the known-plaintext file in the unencrypted archive (astral.jpg).
-
-1) Now let’s go back to Workstation-Desk, open FileZilla and drag the "astral.jpg" file over to Kali and drop it in the "Desktop" directory.
-
-2)Now we are going to create an archive and put "astral.jpg" in it.
-Go to the Security-Desk VM and open up a terminal and type in the command: (be in the Desktop directory):
->7z a KnownFile.zip astral.jpg 
-
-______________________________
- PART IV:
-Running PKCRACK
-
-1)Navigate to pkcrack/demo directory:
->cd ..
->cd pkcrack/demo
-(full pathway: /home/playerone/pkcrack/demo)
-
-2)Run pkcrack
-The command context is:
- pkcrack -C encrypted-ZIP -c ciphertextname -P plaintext-ZIP -p plaintextname -d decrypted_file -a
-
-3)Here is what I actually entered in the terminal:
->sudo ../bin/pkcrack -C /home/playerone/Desktop/exfiltratroll.zip -c astral.jpg -P /home/playerone/Desktop/KnowFile.zip -p astral.jpg -d /home/playerone/Desktop/REVEALED -a
-	
-	-C is the pathway to the encrypted.zip folder
-	-c is the name of the file that we know the contents of (no pathway) in the encrypted arhcive
-	-P is the pathway to the unencrypted.zip archive with the known-plaintext file
-	-p is the name of the file that we know the contents of (no pathway) in the unencrypted archive
-	-d outputs the contents of the encryped.zip archive into an unencrypted zip archive
-	-a .... not sure what this flag does but it's required
-
-4)After successfuly running pkcrack an archive will be made. I called it "RVEALED". It will be in the Desktop directory.
-5)Go to the Desktop directory and extract the contents from the "REVEALED" archive.
-	- this will display the 3 jpgs and 1 text file that were previously password protected. 
-____________________________
-PART V:
-Returning the files back to Workstation-Desk
-
-1) Go back to the Workstation-Desk VM and open FileZilla. Reconnect if you closed out, otherwise refresh the program using the refresh symbol.
-2)On the Security-Desk workstation we can open the Desktop folder and see the 4 new files. Drag and drop them onto the C:\ drive on the Workstation-Desk.
-
-FINISH
+# I ended up figuring out why this guide doesn't work and made an updated version here.
+# You really only need to update they keyring, as when this guide was published the VM's keyring was up-to-date
+# Ended up using an agent to turn my fix into an updated guide
+# I also have another guide for a lab not listed in this repo, located at: https://github.com/KurwaGod/disk-image-forensics
 
 
+Environment
+Machine	Role	Notes
+Workstation-Desk	Windows	Flash drive at E:\Ione holds exfiltratroll.zip and a loose, unencrypted astral.jpg
+Security-Desk	Kali Linux	172.16.30.6
 
+Credentials used throughout: playerone / password123.
 
+The loose astral.jpg is the whole key to the challenge: it is the known plaintext.
 
+Part 0 — Fix APT (the signing-key problem)
 
+Symptoms on an old image:
 
+sudo apt update → NO_PUBKEY ED65462EC8D5E4C5
+sudo apt install ... → 404 Not Found on the package files
 
-___________________________________________
-Sources Used:
+Why: In 2025 Kali lost its old repo signing key (ED444FF07D8D0BF6) and issued a new one (ED65462EC8D5E4C5). An image built before ~May 2025 can't verify the current release file, so apt refuses to refresh the index and keeps using the stale one — whose package versions have since been purged from the mirror pool, which is why the install 404s.
 
-https://www.linuxfordevices.com/tutorials/install-cmake-on-linux
-https://github.com/keyunluo/pkcrack
-https://www.youtube.com/watch?v=ZvYGd6qUjFU
-https://debug.plus/use-pkcrack-plaintext-to-crack-the-password-of-zip-compressed-file.html
-https://mattcasmith.net/2020/09/12/cracking-password-protected-zip-file-fcrackzip
+Fix (official Kali remedy):
 
+sudo wget https://archive.kali.org/archive-keyring.gpg -O /usr/share/keyrings/kali-archive-keyring.gpg
+sha1sum /usr/share/keyrings/kali-archive-keyring.gpg
 
+The checksum should be exactly:
+
+603374c107a90a69d983dbcb4d31e0d6eedfc325
+
+Then refresh:
+
+sudo apt update
+
+It should now complete with no NO_PUBKEY line.
+
+Do NOT run apt full-upgrade / apt upgrade. On an old image that's a multi‑GB, long‑running operation that can leave the VM broken (kernel/driver mismatches). You only need cmake. 
+
+#file integrity will cause a fail 
+
+Part 1 — Install the build toolchain
+
+make and g++ ship with Kali; only cmake is missing.
+
+sudo apt install cmake
+cmake --version
+part 2 — Build bkcrack (replaces pkcrack)
+
+The original guide runs git clone https://github.com/keyunluo/pkcrack, which now prompts for a GitHub login — GitHub's behaviour when a repo is private or deleted. Rather than hunt for a mirror of an abandoned fork, use bkcrack, which performs the same ZipCrypto known‑plaintext attack and is actively maintained.
+
+cd ~
+git clone https://github.com/kimci86/bkcrack
+mkdir bkcrack/build
+cd bkcrack/build
+cmake ..
+make
+find ~/bkcrack -type f -name bkcrack
+
+The binary lands at ~/bkcrack/build/src/cli/bkcrack.
+
+If your cmake is 4.x and it errors with "Compatibility with CMake < 3.5 has been removed", re-run the configure step as cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ... (Not needed for current bkcrack, but handy to know.)
+
+Stage the binary next to wherever your evidence will live, e.g.:
+
+cp ~/bkcrack/build/src/cli/bkcrack ~/Downloads/
+Part 3 — Bring the evidence to Kali
+
+Make sure SSH is running on Kali so a transfer can connect:
+
+sudo systemctl start ssh
+systemctl is-active ssh
+
+From Workstation-Desk, copy both E:\Ione\exfiltratroll.zip and the loose E:\Ione\astral.jpg to Kali. Either tool works:
+
+FileZilla — Host sftp://172.16.30.6, user playerone, pass password123, port 22.
+Windows built-in scp — scp E:\Ione\exfiltratroll.zip playerone@172.16.30.6:/home/playerone/Downloads/ (and the same for astral.jpg).
+Part 4 — Inspect the archive (don't skip this)
+./bkcrack -L exfiltratroll.zip
+
+Confirm before attacking:
+
+Encryption = ZipCrypto — this is what the known‑plaintext attack beats. If it said AES, this attack cannot work.
+Compression = Deflate — note this; it dictates how we prepare the plaintext.
+All four files are present: 2EWX83.txt, astral.jpg, fog.jpg, prince.jpg.
+Part 5 — The known-plaintext attack
+
+Why it works: Legacy ZipCrypto encryption is broken against known plaintext. Because astral.jpg exists both inside the encrypted archive and as a loose file, we have a complete known plaintext. bkcrack recovers the three internal keys, and those keys unlock every file in the archive — not just astral.jpg.
+
+astral.jpg is stored Deflated inside the archive, so bkcrack needs the compressed form of our plaintext. Zip it with the same Deflate method:
+
+7z a plain.zip astral.jpg
+
+(Optional) sanity-check the compression is close:
+
+./bkcrack -L plain.zip
+
+An exact packed-size match isn't required — bkcrack only needs a short run of matching compressed bytes — but closer is better.
+
+Run the attack:
+
+./bkcrack -C exfiltratroll.zip -c astral.jpg -P plain.zip -p astral.jpg
+
+Success ends with:
+
+Keys: <k0> <k1> <k2>
+Part 6 — Unlock and extract
+
+Rebuild the archive with a password you choose, using the recovered keys:
+
+./bkcrack -C exfiltratroll.zip -k <k0> <k1> <k2> -U unlocked.zip cracked
+
+Extract into a clean subfolder (no space after -p or -o):
+
+7z x unlocked.zip -pcracked -orevealed
+
+Everything is Ok means every file passed its CRC check — i.e., correct decryption. A wrong key would fail here instead, so this step is self-verifying. Confirm the file types:
+
+file revealed/*
+
+You should see three JPEG images and one ASCII text file.
+
+Part 7 — Return the files to C:\ (the final gotcha)
+
+Transfer the four files from Kali back to Workstation-Desk.
+
+They must land in the ROOT of C:\ — C:\2EWX83.txt, C:\astral.jpg, C:\fog.jpg, C:\prince.jpg. Not in a subfolder. If you drag the revealed folder across, the files end up at C:\revealed\..., one level too deep, and the checks stay red. Move them up to the drive root and give the checks up to a minute to re-poll.
+
+When all four files sit at the root of C:\, the four objectives flip to Desired State.
+
+What the original guide got wrong (summary)
+Expired APT signing key — add the keyring fix in Part 0; never full-upgrade.
+keyunluo/pkcrack repo is gone — use bkcrack instead (Part 2).
+KnownFile.zip vs KnowFile.zip typo in the original pkcrack command — avoided here by bkcrack's clearer syntax; general lesson: keep filenames consistent.
+Final file location — the checks read the root of C:\, not a subfolder.
+Tools used
+#bkcrack (1.8.1) — ZipCrypto known-plaintext attack
+#7-Zip (7z) — archive inspection, building the plaintext zip, extraction
+#cmake / #make / #g++ — building bkcrack from source
+#git — cloning bkcrack
+#FileZilla / #OpenSSH-scp — file transfer between Windows and Kali
+#wget — downloading the updated Kali keyring
